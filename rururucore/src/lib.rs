@@ -1,5 +1,5 @@
 use std::f32::consts::E;
-
+use base64::{Engine, engine::{self, general_purpose}};
 use serde::{Deserialize, Serialize};
 use serde_json::Result;
 
@@ -107,6 +107,69 @@ where
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct MimeBundle {
+    mimeType: String,
+    base64Data: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Attachment {
+    fileName: String,
+    mimeBundle: MimeBundle,
+}
+
+fn deserialize_attachments<'de, D>(deserializer: D) -> std::result::Result<Option<Vec<Attachment>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // attachments look like this in the actual files:
+    // "attachments": {
+    //     "myfile.png": {
+    //         "image/png": "base64-encoded-data"
+    //     }
+    // }
+    // serde sees them coming in as a map of string to map of string to string
+    // but we want to convert them to a vector of Attachment structs where the
+    // key is the fileName and the inner map is the mimeBundle
+    let value: Option<std::collections::HashMap<String, std::collections::HashMap<String, String>>> =
+        Option::deserialize(deserializer)?;
+    if let Some(map) = value {
+        let mut attachments = Vec::new();
+        for (file_name, mime_map) in map {
+            for (mime_type, base64_data) in mime_map {
+                let mime_bundle = MimeBundle {
+                    mimeType: mime_type,
+                    base64Data: base64_data,
+                };
+                // validate the mime-type field resembles a mime type
+                let re = regex::Regex::new(r"^[a-zA-Z0-9\-\+\.]+\/[a-zA-Z0-9\-\+\.]+$
+").unwrap();
+                if !re.is_match(&mime_bundle.mimeType) {
+                    return Err(serde::de::Error::custom(
+                        "Attachment mimeType does not look valid"
+                    ));
+                }
+
+                // validate that base64Data is valid base64
+                if base64::engine::general_purpose::STANDARD.decode(&mime_bundle.base64Data).is_err() {
+                    return Err(serde::de::Error::custom(
+                        "Attachment base64Data is not valid base64"
+                    ));
+                }
+
+                let attachment = Attachment {
+                    fileName: file_name.clone(),
+                    mimeBundle: mime_bundle,
+                };
+                attachments.push(attachment);
+            }
+        }
+        return Ok(Some(attachments));
+    }
+    Ok(None)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct RawCellJupyterMetadata {
     source_hidden: Option<bool>,
 }
@@ -166,7 +229,9 @@ struct RawCell {
     id: String,
     #[serde(deserialize_with = "deserialize_raw_cell_type")]
     cell_type: String,
-    source: String,
+    source: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_attachments")]
+    attachments: Option<Vec<Attachment>>,
     metadata: RawCellMetadata,
 }
 
