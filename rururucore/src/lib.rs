@@ -116,12 +116,16 @@ struct RawCell {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct MarkdownCell {
+    #[serde(deserialize_with = "deserialize_cell_id")]
+    id : String,
     cell_type: String,
     source: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct CodeCell {
+    #[serde(deserialize_with = "deserialize_cell_id")]
+    id: String,
     cell_type: String,
     source: String,
     outputs: Vec<serde_json::Value>,
