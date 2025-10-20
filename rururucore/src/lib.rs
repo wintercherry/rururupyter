@@ -107,29 +107,126 @@ where
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct RawCellJupyterMetadata {
+    source_hidden: Option<bool>,
+}
+
+fn deserialize_cell_name<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<String> = Option::deserialize(deserializer)?;
+    if let Some(ref name) = value {
+        if !name.is_empty() {
+            // check against pattern: "^.+$"
+            let re = regex::Regex::new(r"^.+$").unwrap();
+            if !re.is_match(name) {
+                return Err(serde::de::Error::custom(
+                    "Cell name must match pattern ^.+$",
+                ));
+            }
+        }
+    }
+    Ok(value)
+}
+
+fn deserialize_cell_tags<'de, D>(deserializer: D) -> std::result::Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<Vec<String>> = Option::deserialize(deserializer)?;
+    if let Some(ref tags) = value {
+        for tag in tags {
+            // check against pattern: ^[^,]+$
+            let re = regex::Regex::new(r"^[^,]+$").unwrap();
+            if !re.is_match(tag) {
+                return Err(serde::de::Error::custom(
+                    "Each cell tag must match pattern ^[^,]+$",
+                ));
+            }
+        }
+    }
+    Ok(value)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct RawCellMetadata {
+    // Placeholder for raw cell metadata fields
+    format: Option<String>,
+    jupyter: Option<RawCellJupyterMetadata>,
+    #[serde(default, deserialize_with = "deserialize_cell_name")]
+    name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_cell_tags")]
+    tags: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct RawCell {
     #[serde(deserialize_with = "deserialize_cell_id")]
     id: String,
+    #[serde(deserialize_with = "deserialize_raw_cell_type")]
     cell_type: String,
     source: String,
+    metadata: RawCellMetadata,
+}
+
+fn deserialize_raw_cell_type<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    if value != "raw" {
+        return Err(serde::de::Error::custom(
+            "RawCell cell_type must be 'raw'",
+        ));
+    }
+    Ok(value)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct MarkdownCell {
     #[serde(deserialize_with = "deserialize_cell_id")]
     id : String,
+    #[serde(deserialize_with = "deserialize_markdown_cell_type")]
     cell_type: String,
     source: String,
+}
+
+fn deserialize_markdown_cell_type<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    if value != "markdown" {
+        return Err(serde::de::Error::custom(
+            "MarkdownCell cell_type must be 'markdown'",
+        ));
+    }
+    Ok(value)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct CodeCell {
     #[serde(deserialize_with = "deserialize_cell_id")]
     id: String,
+    #[serde(deserialize_with = "deserialize_code_cell_type")]
     cell_type: String,
     source: String,
     outputs: Vec<serde_json::Value>,
     execution_count: Option<u64>,
+}
+
+fn deserialize_code_cell_type<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    if value != "code" {
+        return Err(serde::de::Error::custom(
+            "CodeCell cell_type must be 'code'",
+        ));
+    }
+    Ok(value)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -323,6 +420,70 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // see nbformat-schema.json line 126
+    #[test]
+    fn test_rawcell_metadata() {
+        // name, format, tags, jupyter are all optional
+
+
+
+        let data = r#"
+        {
+                "format": "text/plain",
+                "jupyter": {
+                        "source_hidden": true
+                }
+        }
+        "#;
+
+        let metadata: RawCellMetadata = serde_json::from_str(data).unwrap();
+        assert_eq!(metadata.format.unwrap(), "text/plain");
+        let jupyter_meta = metadata.jupyter.unwrap();
+        assert_eq!(jupyter_meta.source_hidden.unwrap(), true);
+
+        // make sure if name or tags are specified that they match the patterns
+        let data_with_name_tags = r#"
+        {
+                "format": "text/plain",
+                "jupyter": {
+                        "source_hidden": false
+                },
+                "name": "cell_name_1",
+                "tags": ["tag1", "tag2"]
+        }
+        "#;
+        let metadata: RawCellMetadata = serde_json::from_str(data_with_name_tags).unwrap();
+        assert_eq!(metadata.name.unwrap(), "cell_name_1");
+        let tags = metadata.tags.unwrap();
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0], "tag1");
+        assert_eq!(tags[1], "tag2");
+
+    }
+
+    fn test_cell_metadata_tags() {
+        // test that invalid tag fails
+        let data_invalid_tag = r#"
+        {
+                "tags": ["valid_tag", "invalid,tag"]
+        }
+        "#;
+        let result: Result<Option<Vec<String>>> = deserialize_cell_tags(&mut serde_json::Deserializer::from_str(data_invalid_tag));
+        assert!(result.is_err());
+    }
+
+    fn test_cell_metadata_name() {
+        // test that invalid name fails
+        let data_invalid_name = r#"
+        {
+                "name": ""
+        }
+        "#;
+        let result: Result<Option<String>> = deserialize_cell_name(&mut serde_json::Deserializer::from_str(data_invalid_name));
+        assert!(result.is_err());
+
+    }
+
     // see nbformat-schema.json line 8
     #[test]
     fn test_metadata() {
@@ -408,5 +569,8 @@ mod tests {
         // output a note that cells are not implemented
         let notebook_result: Result<Notebook> = serde_json::from_str(data);
         assert!(notebook_result.is_err());
+
+        // todo: test that cell names are unique across the notebook once cells are implemented
+
     }
 }
