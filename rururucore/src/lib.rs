@@ -1,3 +1,5 @@
+use std::f32::consts::E;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Result;
 
@@ -37,7 +39,7 @@ where
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Metadata {
+struct NotebookMetadata {
     kernelspec: Option<KernelSpec>,
     language_info: Option<LanguageInfo>,
     #[serde(deserialize_with = "deserialize_orig_nbformat")]
@@ -71,13 +73,77 @@ where
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct CellMetadata {
+    // Placeholder for cell metadata fields
+}
+
+fn deserialize_cell_id<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer);
+    if let unwrapped_value = value.unwrap() {
+        // proceed to validate constraints
+        if unwrapped_value.is_empty() {
+            return Err(serde::de::Error::custom("Cell id cannot be empty"));
+        }
+    // must conform to the following constraints:
+        if unwrapped_value.len() > 64 {
+            return Err(serde::de::Error::custom(
+                "Cell id cannot be longer than 64 characters",
+            ));
+        }
+        // check if matches pattern
+        let re = regex::Regex::new(r"^[a-zA-Z0-9\-_]+$").unwrap();
+        if !re.is_match(&unwrapped_value) {
+            return Err(serde::de::Error::custom(
+                "Cell id must match pattern ^[a-zA-Z0-9-_]+$",
+            ));
+        }
+        Ok(unwrapped_value)
+    } else {
+        Err(serde::de::Error::custom("Cell id must be a string"))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct RawCell {
+    #[serde(deserialize_with = "deserialize_cell_id")]
+    id: String,
+    cell_type: String,
+    source: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct MarkdownCell {
+    cell_type: String,
+    source: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct CodeCell {
+    cell_type: String,
+    source: String,
+    outputs: Vec<serde_json::Value>,
+    execution_count: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum Cell {
+    RawCell,
+    MarkdownCell,
+    CodeCell,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct Notebook {
-    metadata: Metadata,
+    metadata: NotebookMetadata,
     #[serde(deserialize_with = "deserialize_nbformat")]
     nbformat: u64,
     #[serde(deserialize_with = "deserialize_nbformat_minor")]
     nbformat_minor: u64,
-    // cells: Vec<Cell>, // Not implemented here
+    cells: Vec<Cell>,
 }
 
 #[cfg(test)]
@@ -226,6 +292,33 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // see nbformat-schema.json line 98
+    #[test]
+    fn test_cell_id() {
+        let data = r#"
+        "cell-123_A"
+        "#;
+        let cell_id: String = deserialize_cell_id(&mut serde_json::Deserializer::from_str(data)).unwrap();
+        assert_eq!(cell_id, "cell-123_A");
+        // test that empty string fails
+        let data_empty = r#""#;
+        let result: std::result::Result<String, _> =
+            serde_json::from_str(data_empty);
+        assert!(result.is_err());
+        // test that too long string fails
+        let data_too_long = r#"
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_extra"
+        "#;
+        let result = deserialize_cell_id(&mut serde_json::Deserializer::from_str(data_too_long));
+        assert!(result.is_err());
+        // test that invalid pattern fails
+        let data_invalid_pattern = r#"
+        "cell@123!"
+        "#;
+        let result = deserialize_cell_id(&mut serde_json::Deserializer::from_str(data_invalid_pattern));
+        assert!(result.is_err());
+    }
+
     // see nbformat-schema.json line 8
     #[test]
     fn test_metadata() {
@@ -251,7 +344,7 @@ mod tests {
     }    
      "#;
 
-        let metadata: Metadata = serde_json::from_str(data).unwrap();
+        let metadata: NotebookMetadata = serde_json::from_str(data).unwrap();
 
         // Check kernelspec
         let kernelspec = metadata.kernelspec.unwrap();
