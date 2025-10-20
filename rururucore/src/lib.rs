@@ -278,4 +278,38 @@ mod tests {
         assert_eq!(authors[0].name, "John Doe");
         assert_eq!(authors[1].name, "Jane Smith");
     }
+
+    #[test]
+    fn test_notebook() {
+        // fail until cells finished
+        let data = r#"
+        {
+                "metadata": {
+                        "kernelspec": {
+                                "name": "python3",
+                                "display_name": "Python 3"
+                        },
+                        "language_info": {
+                                "name": "python",
+                                "codemirror_mode": "ipython",
+                                "mimetype": "text/x-python",
+                                "file_extension": ".py",
+                                "pygments_lexer": "ipython3"
+                        },
+                        "original_notebook_format": 4,
+                        "title": "Sample Notebook",
+                        "authors": [
+                                {"name": "John Doe"},
+                                {"name": "Jane Smith"}
+                        ]
+                },
+                "nbformat": 4,
+                "nbformat_minor": 5
+                "cells": [] // Not implemented yet
+        }
+        "#;
+        // output a note that cells are not implemented
+        let notebook_result: Result<Notebook> = serde_json::from_str(data);
+        assert!(notebook_result.is_err());
+    }
 }
