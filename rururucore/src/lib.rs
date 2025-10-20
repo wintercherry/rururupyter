@@ -44,7 +44,40 @@ struct Metadata {
     original_notebook_format: Option<u64>, // minimum is 1
     title: Option<String>,
     authors: Option<Vec<Author>>,
+}
 
+fn deserialize_nbformat<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: u64 = u64::deserialize(deserializer)?;
+    if value != 4 {
+        return Err(serde::de::Error::custom("nbformat must be 4"));
+    }
+    Ok(value)
+}
+
+fn deserialize_nbformat_minor<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: u64 = u64::deserialize(deserializer)?;
+    if value < 5 {
+        return Err(serde::de::Error::custom(
+            "nbformat_minor must be 5 or greater",
+        ));
+    }
+    Ok(value)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Notebook {
+    metadata: Metadata,
+    #[serde(deserialize_with = "deserialize_nbformat")]
+    nbformat: u64,
+    #[serde(deserialize_with = "deserialize_nbformat_minor")]
+    nbformat_minor: u64,
+    // cells: Vec<Cell>, // Not implemented here
 }
 
 #[cfg(test)]
@@ -150,6 +183,46 @@ mod tests {
         "#; 
         let result: std::result::Result<Option<u64>, _> =
             deserialize_orig_nbformat(&mut serde_json::Deserializer::from_str(data_invalid));
+        assert!(result.is_err());
+    }
+
+    // see nbformat-schema.json line 79
+    #[test]
+    fn test_nbformat_minor() {
+        let data = r#"
+        5
+        "#;
+
+        // test using deserialize_nbformat_minor directly
+        let value: u64 = serde_json::from_str(data).unwrap();
+        assert_eq!(value, 5);
+
+        // test that value less than 5 fails
+        let data_invalid = r#"
+        4
+        "#;
+        let result: std::result::Result<u64, _> =
+            deserialize_nbformat_minor(&mut serde_json::Deserializer::from_str(data_invalid));
+        assert!(result.is_err());
+    }
+
+    // see nbformat-schema.json line 84
+    #[test]
+    fn test_nbformat() {
+        let data = r#"
+        4
+        "#;
+
+        // test using deserialize_nbformat directly
+        let value: u64 = serde_json::from_str(data).unwrap();
+        assert_eq!(value, 4);
+
+        // test that value not equal to 4 fails
+        let data_invalid = r#"
+        3
+        "#;
+        let result: std::result::Result<u64, _> =
+            deserialize_nbformat(&mut serde_json::Deserializer::from_str(data_invalid));
         assert!(result.is_err());
     }
 
