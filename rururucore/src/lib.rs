@@ -526,6 +526,7 @@ mod tests {
 
     }
 
+    #[test]
     fn test_cell_metadata_tags() {
         // test that invalid tag fails
         let data_invalid_tag = r#"
@@ -537,6 +538,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[test]
     fn test_cell_metadata_name() {
         // test that invalid name fails
         let data_invalid_name = r#"
