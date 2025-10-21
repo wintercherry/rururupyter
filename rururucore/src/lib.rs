@@ -142,8 +142,7 @@ where
                     base64Data: base64_data,
                 };
                 // validate the mime-type field resembles a mime type
-                let re = regex::Regex::new(r"^[a-zA-Z0-9\-\+\.]+\/[a-zA-Z0-9\-\+\.]+$
-").unwrap();
+                let re = regex::Regex::new(r"[a-zA-Z0-9\-\+\.]+\/[a-zA-Z0-9\-\+\.]+$").unwrap();
                 if !re.is_match(&mime_bundle.mimeType) {
                     return Err(serde::de::Error::custom(
                         "Attachment mimeType does not look valid"
@@ -549,6 +548,31 @@ mod tests {
         let result: Result<Option<String>> = deserialize_cell_name(&mut serde_json::Deserializer::from_str(data_invalid_name));
         assert!(result.is_err());
 
+    }
+
+    #[test]
+    fn test_attachments() {
+        let data = r#"
+        {
+                "myfile.png": {
+                        "image/png": "iVBORw0KGgoAAAANSUhEUgAAAAUA"
+                },
+                "document.pdf": {
+                        "application/pdf": "JVBERi0xLjQKJcfsj6IKNSAwIG9iago8PAov"
+                }
+        }
+        "#;
+
+        let attachments: Option<std::collections::HashMap<String, std::collections::HashMap<String, String>>> =
+            serde_json::from_str(data).unwrap();
+
+        let deserialized_attachments = deserialize_attachments(&mut serde_json::Deserializer::from_str(data)).unwrap();
+        assert!(deserialized_attachments.is_some());
+        let attachments_vec = deserialized_attachments.unwrap();
+        assert_eq!(attachments_vec.len(), 2);
+        assert_eq!(attachments_vec[0].fileName, "myfile.png");
+        assert_eq!(attachments_vec[0].mimeBundle.mimeType, "image/png");
+        assert_eq!(attachments_vec[0].mimeBundle.base64Data, "iVBORw0KGgoAAAANSUhEUgAAAAUA");
     }
 
     // see nbformat-schema.json line 8
