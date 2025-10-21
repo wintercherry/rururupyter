@@ -2,6 +2,10 @@ use std::f32::consts::E;
 use base64::{Engine, engine::{self, general_purpose}};
 use serde::{Deserialize, Serialize};
 use serde_json::Result;
+use indexmap::IndexMap;
+
+type MimeBundleMap = IndexMap<String, String>;
+type AttachmentsMap = IndexMap<String, MimeBundleMap>;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct KernelSpec {
@@ -126,7 +130,7 @@ where
     // serde sees them coming in as a map of string to map of string to string
     // but we want to convert them to a vector of Attachment structs where the
     // key is the fileName and the inner map is the mimeBundle
-    let value: Option<std::collections::HashMap<String, std::collections::HashMap<String, String>>> =
+    let value: Option<AttachmentsMap> =
         Option::deserialize(deserializer)?;
     if let Some(map) = value {
         let mut attachments = Vec::new();
@@ -248,7 +252,10 @@ struct MarkdownCell {
     id : String,
     #[serde(deserialize_with = "deserialize_markdown_cell_type")]
     cell_type: String,
-    source: String,
+    source: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_attachments")]
+    attachments: Option<Vec<Attachment>>,
+    metadata: CellMetadata,
 }
 
 fn deserialize_markdown_cell_type<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
@@ -558,7 +565,7 @@ mod tests {
         }
         "#;
 
-        let attachments: Option<std::collections::HashMap<String, std::collections::HashMap<String, String>>> =
+        let attachments: Option<AttachmentsMap> =
             serde_json::from_str(data).unwrap();
 
         let deserialized_attachments = deserialize_attachments(&mut serde_json::Deserializer::from_str(data)).unwrap();
