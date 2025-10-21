@@ -603,6 +603,55 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[test]
+    fn test_markdown_cell() {
+        let data = r##"
+        {
+                "id": "mdcell-1",
+                "cell_type": "markdown",
+                "source": [
+                        "# This is a markdown cell\n",
+                        "Some *italic* and **bold** text."
+                ],
+                "attachments": {
+                        "image1.png": {
+                                "image/png": "iVBORw0KGgoAAAANSUhEUgAAAAUA"
+                        }
+                },
+                "metadata": {
+                        "format": "text/markdown",
+                        "jupyter": {
+                                "source_hidden": false
+                        },
+                        "name": "intro_cell",
+                        "tags": ["introduction", "markdown"]
+                }
+        }
+        "##;
+
+        let md_cell: MarkdownCell = serde_json::from_str(data).unwrap();
+        assert_eq!(md_cell.id, "mdcell-1");
+        assert_eq!(md_cell.cell_type, "markdown");
+        assert_eq!(md_cell.source.len(), 2);
+        assert_eq!(md_cell.source[0], "# This is a markdown cell\n");
+        assert_eq!(md_cell.source[1], "Some *italic* and **bold** text.");
+        assert!(md_cell.attachments.is_some());
+        let attachments = md_cell.attachments.unwrap();
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0].fileName, "image1.png");
+        assert_eq!(attachments[0].mimeBundle.mimeType, "image/png");
+        assert_eq!(attachments[0].mimeBundle.base64Data, "iVBORw0KGgoAAAANSUhEUgAAAAUA");
+        let metadata = md_cell.metadata;
+        assert_eq!(metadata.format.unwrap(), "text/markdown");
+        let jupyter_meta = metadata.jupyter.unwrap();
+        assert_eq!(jupyter_meta.source_hidden.unwrap(), false);
+        assert_eq!(metadata.name.unwrap(), "intro_cell");
+        let tags = metadata.tags.unwrap();
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0], "introduction");
+        assert_eq!(tags[1], "markdown");
+    }
+
     // see nbformat-schema.json line 8
     #[test]
     fn test_metadata() {
