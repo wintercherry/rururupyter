@@ -570,6 +570,32 @@ mod tests {
         assert_eq!(attachments_vec[0].mimeBundle.base64Data, "iVBORw0KGgoAAAANSUhEUgAAAAUA");
     }
 
+    #[test]
+    fn test_attachments_invalid_mime() {
+        let data = r#"
+        {
+                "myfile.png": {
+                        "invalid-mime-type": "iVBORw0KGgoAAAANSUhEUgAAAAUA"
+        }
+        "#;
+
+        let result: Result<Option<Vec<Attachment>>> = deserialize_attachments(&mut serde_json::Deserializer::from_str(data));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_attachments_invalid_base64() {
+        let data = r#"
+        {
+                "myfile.png": {
+                        "image/png": "invalid-base64-data!!"
+                }
+        }
+        "#;
+        let result: Result<Option<Vec<Attachment>>> = deserialize_attachments(&mut serde_json::Deserializer::from_str(data));
+        assert!(result.is_err());
+    }
+
     // see nbformat-schema.json line 8
     #[test]
     fn test_metadata() {
