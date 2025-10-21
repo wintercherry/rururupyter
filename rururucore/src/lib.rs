@@ -72,11 +72,6 @@ where
     Ok(value)
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct CellMetadata {
-    // Placeholder for cell metadata fields
-}
-
 fn deserialize_cell_id<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -212,8 +207,8 @@ where
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RawCellMetadata {
-    // Placeholder for raw cell metadata fields
+struct CellMetadata {
+    // Placeholder for cell metadata fields
     format: Option<String>,
     jupyter: Option<RawCellJupyterMetadata>,
     #[serde(default, deserialize_with = "deserialize_cell_name")]
@@ -231,7 +226,7 @@ struct RawCell {
     source: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_attachments")]
     attachments: Option<Vec<Attachment>>,
-    metadata: RawCellMetadata,
+    metadata: CellMetadata,
 }
 
 fn deserialize_raw_cell_type<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
@@ -500,7 +495,7 @@ mod tests {
         }
         "#;
 
-        let metadata: RawCellMetadata = serde_json::from_str(data).unwrap();
+        let metadata: CellMetadata = serde_json::from_str(data).unwrap();
         assert_eq!(metadata.format.unwrap(), "text/plain");
         let jupyter_meta = metadata.jupyter.unwrap();
         assert_eq!(jupyter_meta.source_hidden.unwrap(), true);
@@ -516,7 +511,7 @@ mod tests {
                 "tags": ["tag1", "tag2"]
         }
         "#;
-        let metadata: RawCellMetadata = serde_json::from_str(data_with_name_tags).unwrap();
+        let metadata: CellMetadata = serde_json::from_str(data_with_name_tags).unwrap();
         assert_eq!(metadata.name.unwrap(), "cell_name_1");
         let tags = metadata.tags.unwrap();
         assert_eq!(tags.len(), 2);
