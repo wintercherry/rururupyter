@@ -1,0 +1,1 @@
+Notes: The reference schema comes from [the nbformat project](https://github.com/jupyter/nbformat/blob/main/nbformat/v4/nbformat.v4.schema.json) and is BSD-3 licensed (see [LICENSE.txt](LICENSE.txt)).
